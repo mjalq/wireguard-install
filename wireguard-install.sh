@@ -427,6 +427,40 @@ function revokeClient() {
 	wg syncconf "${SERVER_WG_NIC}" <(wg-quick strip "${SERVER_WG_NIC}")
 }
 
+function viewClientQR() {
+	NUMBER_OF_CLIENTS=$(grep -c -E "^### Client" "/etc/wireguard/${SERVER_WG_NIC}.conf")
+	if [[ ${NUMBER_OF_CLIENTS} == '0' ]]; then
+		echo ""
+		echo "You have no existing clients!"
+		exit 1
+	fi
+
+	echo ""
+	echo "Select the existing client you want to view the QR code of"
+	grep -E "^### Client" "/etc/wireguard/${SERVER_WG_NIC}.conf" | cut -d ' ' -f 3 | nl -s ') '
+	until [[ ${CLIENT_NUMBER} -ge 1 && ${CLIENT_NUMBER} -le ${NUMBER_OF_CLIENTS} ]]; do
+		if [[ ${CLIENT_NUMBER} == '1' ]]; then
+			read -rp "Select one client [1]: " CLIENT_NUMBER
+		else
+			read -rp "Select one client [1-${NUMBER_OF_CLIENTS}]: " CLIENT_NUMBER
+		fi
+	done
+
+	# match the selected number to a client name
+	CLIENT_NAME=$(grep -E "^### Client" "/etc/wireguard/${SERVER_WG_NIC}.conf" | cut -d ' ' -f 3 | sed -n "${CLIENT_NUMBER}"p)
+    HOME_DIR=$(getHomeDirForClient "${CLIENT_NAME}")
+
+    # Generate QR code if qrencode is installed
+	if command -v qrencode &>/dev/null; then
+		echo -e "${GREEN}\nHere is your client config file as a QR Code:\n${NC}"
+		qrencode -t ansiutf8 -l L <"${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
+		echo ""
+    else
+        echo "qrencode is not installed, try running    sudo apt-get install -y qrencode"
+        echo ""
+	fi
+}
+
 function uninstallWg() {
 	echo ""
 	echo -e "\n${RED}WARNING: This will uninstall WireGuard and remove all the configuration files!${NC}"
@@ -492,11 +526,12 @@ function manageMenu() {
 	echo "What do you want to do?"
 	echo "   1) Add a new user"
 	echo "   2) List all users"
-	echo "   3) Revoke existing user"
-	echo "   4) Uninstall WireGuard"
-	echo "   5) Exit"
-	until [[ ${MENU_OPTION} =~ ^[1-5]$ ]]; do
-		read -rp "Select an option [1-5]: " MENU_OPTION
+    echo "   3) View user QR Code"
+	echo "   4) Revoke existing user"
+	echo "   5) Uninstall WireGuard"
+	echo "   6) Exit"
+	until [[ ${MENU_OPTION} =~ ^[1-6]$ ]]; do
+		read -rp "Select an option [1-6]: " MENU_OPTION
 	done
 	case "${MENU_OPTION}" in
 	1)
@@ -506,12 +541,15 @@ function manageMenu() {
 		listClients
 		;;
 	3)
+		viewClientQR
+		;;
+    4)
 		revokeClient
 		;;
-	4)
+	5)
 		uninstallWg
 		;;
-	5)
+	6)
 		exit 0
 		;;
 	esac
